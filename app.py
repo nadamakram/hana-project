@@ -1,43 +1,99 @@
 import streamlit as st
 import random
 import time
+from dotenv import load_dotenv
+import os 
+from ibm_watsonx_ai import Credentials
+from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
+from ibm_watsonx_ai.foundation_models.utils.enums import DecodingMethods
+from langchain_ibm import WatsonxLLM
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+
+load_dotenv()
 
 
-# Streamed response emulator
-def response_generator():
-    response = random.choice(
-        [
-            "Hello there! How can I assist you today?",
-            "Hi, human! Is there anything I can help you with?",
-            "Do you need help?",
-        ]
-    )
-    for word in response.split():
-        yield word + " "
-        time.sleep(0.05)
+
+api_key = os.getenv('WATSONX_API_KEY')
+
+credentials = Credentials(
+    url="https://eu-de.ml.cloud.ibm.com",
+    api_key=api_key,
+)
+
+project_id = os.environ["WATSONX_PROJECT_ID"]
 
 
-st.title("مساعدك الشخصي في معرفة الحضارة المصرية القديمة")
+# app config
+st.set_page_config(page_title="HeroWorld Egyptian AI Assistant المساعد الرقمي عالم هيرو", page_icon="𓂀📜")
+st.title("HeroWorld Egyptian AI Assistant المساعد الرقمي عالم هيرو𓀛")
 
-# Initialize chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+def get_response(user_query, chat_history):
 
-# Display chat messages from history on app rerun
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    template = """
+    You are a helpful assistant. Answer the following questions considering the history of the conversation:
 
-# Accept user input
-if prompt := st.chat_input("What is up?"):
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    # Display user message in chat message container
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    Chat history: {chat_history}
 
-    # Display assistant response in chat message container
-    with st.chat_message("assistant"):
-        response = st.write_stream(response_generator())
-    # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    User question: {user_question}
+    """
+
+    prompt = ChatPromptTemplate.from_template(template)
+
+    parameters = {
+    GenParams.DECODING_METHOD: DecodingMethods.SAMPLE.value,
+    GenParams.MAX_NEW_TOKENS: 100,
+    GenParams.MIN_NEW_TOKENS: 1,
+    GenParams.TEMPERATURE: 0.5,
+    GenParams.TOP_K: 50,
+    GenParams.TOP_P: 1
+}
+
+
+    model_id_1 = "meta-llama/llama-3-1-70b-instruct"
+
+    llm = WatsonxLLM(
+        model_id=model_id_1,
+        url=credentials["url"],
+        apikey=credentials["apikey"],
+        project_id=project_id,
+        params=parameters
+        )
+        
+    chain = prompt | llm | StrOutputParser()
+    
+    return chain.stream({
+        "chat_history": chat_history,
+        "user_question": user_query,
+    })
+
+# session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [
+        AIMessage(content=" مرحبا انا عالم هيرو المساعد الذكي كيف أستطيع مساعدتك "),
+    ]
+
+    
+# conversation
+for message in st.session_state.chat_history:
+    if isinstance(message, AIMessage):
+        with st.chat_message("AI"):
+            st.write(message.content)
+    elif isinstance(message, HumanMessage):
+        with st.chat_message("Human"):
+            st.write(message.content)
+
+# user input
+user_query = st.chat_input("Type your message here...")
+if user_query is not None and user_query != "":
+    st.session_state.chat_history.append(HumanMessage(content=user_query))
+
+    with st.chat_message("Human"):
+        st.markdown(user_query)
+
+    with st.chat_message("AI"):
+        response = get_response(user_query, st.session_state.chat_history)
+        st.write(response)
+
+    st.session_state.chat_history.append(AIMessage(content=response))
