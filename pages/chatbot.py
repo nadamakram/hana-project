@@ -26,32 +26,32 @@ project_id = os.environ["WATSONX_PROJECT_ID"]
 
 
 # app config
-st.set_page_config(page_title="HeroWorld Egyptian AI Assistant المساعد الرقمي عالم هيرو", page_icon="𓂀📜")
-st.title("HeroWorld Egyptian AI Assistant المساعد الرقمي عالم هيرو𓀛")
+st.title("HeroKimit Egyptian AI Assistant المساعد الرقمي هيروكيميت𓀛")
+
+# Authentication check
+if "authenticated" not in st.session_state or not st.session_state.authenticated:
+    st.error("Unauthorized access. Please log in first.")
+    st.stop()
 
 def get_response(user_query, chat_history):
 
     template = """
-    You are a helpful assistant. Answer the following questions considering the history of the conversation:
-
-    Chat history: {chat_history}
-
-    User question: {user_question}
+جاوب السؤال بدقه: 
+    السؤال: {user_question}
     """
 
     prompt = ChatPromptTemplate.from_template(template)
 
     parameters = {
     GenParams.DECODING_METHOD: DecodingMethods.SAMPLE.value,
-    GenParams.MAX_NEW_TOKENS: 100,
+    GenParams.MAX_NEW_TOKENS: 900,
     GenParams.MIN_NEW_TOKENS: 1,
     GenParams.TEMPERATURE: 0.5,
     GenParams.TOP_K: 50,
     GenParams.TOP_P: 1
 }
 
-
-    model_id_1 = "meta-llama/llama-3-1-70b-instruct"
+    model_id_1 = "meta-llama/llama-3-3-70b-instruct"
 
     llm = WatsonxLLM(
         model_id=model_id_1,
@@ -61,17 +61,14 @@ def get_response(user_query, chat_history):
         params=parameters
         )
         
-    chain = prompt | llm | StrOutputParser()
+    chain = prompt | llm 
     
-    return chain.stream({
-        "chat_history": chat_history,
-        "user_question": user_query,
-    })
+    return llm.stream(user_query)
 
 # session state
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
-        AIMessage(content=" مرحبا انا عالم هيرو المساعد الذكي كيف أستطيع مساعدتك "),
+        AIMessage(content=" مرحبا انا هيروكيميت المساعد الذكي كيف أستطيع مساعدتك "),
     ]
 
     
@@ -97,3 +94,7 @@ if user_query is not None and user_query != "":
         st.write(response)
 
     st.session_state.chat_history.append(AIMessage(content=response))
+
+    # Optionally limit chat history to the last few exchanges to prevent overflow
+    if len(st.session_state.chat_history) > 10:  # Limit history to the last 5 interactions
+        st.session_state.chat_history = st.session_state.chat_history[-10:]
